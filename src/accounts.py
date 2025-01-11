@@ -6,18 +6,18 @@ from datetime import datetime, date
 
 from tastytrade import Session
 from tastytrade import Account
+from tastytrade import Watchlist
+
 from decimal import Decimal
 
 load_dotenv()  # Load environment variables from .env file
 
-# symbols = ['AAPL', 'GOOGL', 'MSFT']  # Define a list of symbols
-
 # Use environment variables for sensitive information
 username = os.getenv('TASTYTRADE_USERNAME')
 password = os.getenv('TASTYTRADE_PASSWORD')
+watchlist_name = os.getenv('TASTYTRADE_WATCHLIST')
 
 session = Session(username, password)
-
 
 def clean_file(filename):
     """Clean the file by resetting its contents."""
@@ -75,15 +75,36 @@ async def save_positions_to_file(positions, filename):
     except Exception as e:
         print(f"Error saving position data to file: {e}")
 
+async def save_watchlist_to_file(watchlist, filename):
+    """Save the serialized watchlist data to a JSON file."""
+    serialized_data = serialize_object(watchlist)
+    
+    try:
+        with open(filename, "w") as file:
+            json.dump(serialized_data, file, indent=4)
+    except Exception as e:
+        print(f"Error saving watchlist data to file: {e}")
+
+
 async def main():
     """Retrieve and save account and position data to separate JSON files."""
     accounts = Account.get_accounts(session)
 
-    filename = "../files/accounts.json"
+    # Save accounts to file
+    filename = "../files/accounts.json"    
     clean_file(filename)
 
     await save_accounts_to_file(accounts, filename)
+
+    # Save watchlist to file
     
+    watchlist = Watchlist.get_private_watchlist(session, watchlist_name)
+
+    filename = "../files/watchlist.json"
+    clean_file(filename)
+    await save_watchlist_to_file(watchlist.watchlist_entries, filename)
+
+    # Save positions to file
     filename = "../files/positions.json"    
     clean_file(filename)
 

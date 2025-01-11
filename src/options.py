@@ -220,11 +220,8 @@ def save_greeks_to_csv(json_filename, csv_filename):
                 # Round delta to 2 decimal places
                 delta = round(item['delta'], 2)
 
-                # Map option_type to "PUT" or "CALL"
-                option_type_mapped = "PUT" if option_type == "P" else "CALL"
-
                 # Write the row to the CSV
-                writer.writerow([root_symbol, human_readable_date, option_type_mapped, strike_price, item['event_symbol'], delta])
+                writer.writerow([root_symbol, human_readable_date, option_type, strike_price, item['event_symbol'], delta])
 
         print(f"Data has been successfully written to {csv_filename}.")
     except Exception as e:
@@ -232,47 +229,46 @@ def save_greeks_to_csv(json_filename, csv_filename):
 
 
 async def main():
-    # Clean the file before appending new data
-    clean_file(filename)
+    # # Clean the file before appending new data
+    # clean_file(filename)
 
-    for symbol in symbols:  # Iterate over each symbol
-        # Update the filename for each symbol
-        # filename = f"../files/greeks/{symbol}.json"
-        # clean_file(filename)
+    # for symbol in symbols:  # Iterate over each symbol
+    #     # Update the filename for each symbol
+    #     # filename = f"../files/greeks/{symbol}.json"
+    #     # clean_file(filename)
         
-        chain = get_option_chain(session, symbol)
-        exp = get_tasty_monthly()  # 45 DTE expiration!
+    #     chain = get_option_chain(session, symbol)
+    #     exp = get_tasty_monthly()  # 45 DTE expiration!
 
-        # Collect streamer symbols for all items in chain[exp]
-        subs_list = [
-            item.streamer_symbol
-            for item in chain[exp]
-        ]
+    #     # Collect streamer symbols for all items in chain[exp]
+    #     subs_list = [
+    #         item.streamer_symbol
+    #         for item in chain[exp]
+    #     ]
         
-        async with DXLinkStreamer(session) as streamer:
-            # Subscribe to Greeks for all items in subs_list
-            await streamer.subscribe(Greeks, subs_list)
+    #     async with DXLinkStreamer(session) as streamer:
+    #         # Subscribe to Greeks for all items in subs_list
+    #         await streamer.subscribe(Greeks, subs_list)
             
-            # Continuously process incoming events
-            print("Starts for:", symbol)
-            for _ in subs_list:  # Use a for loop to iterate over subs_list
-                greeks = await streamer.get_event(Greeks)  # Get the next event                        
+    #         # Continuously process incoming events
+    #         print("Starts for:", symbol)
+    #         for _ in subs_list:  # Use a for loop to iterate over subs_list
+    #             greeks = await streamer.get_event(Greeks)  # Get the next event                        
                 
-                # Check if delta is within the specified range
-                if filter_by_delta(greeks, min_delta, max_delta):     
-                    greeks = serialize_object(greeks)
-                    await save_greeks_to_file(greeks, filename)  # Save the data to a JSON file                    
-                    # save_greeks_to_db(greeks)
-                    # print(greeks)  # Print the update
+    #             # Check if delta is within the specified range
+    #             if filter_by_delta(greeks, min_delta, max_delta):     
+    #                 greeks = serialize_object(greeks)
+    #                 await save_greeks_to_file(greeks, filename)  # Save the data to a JSON file                    
+    #                 save_greeks_to_db(greeks)
+    #                 # print(greeks)  # Print the update
                     
-            print(f"Done for {symbol}")
+    #         print(f"Done for {symbol}")
 
-    # print("Starts ")
-    # clean_file('../files/greeks/greeks.csv')
+    print("Starts ")
+    clean_file('../files/greeks/greeks.csv')
 
-    # save_greeks_to_csv("../files/greeks/greeks.json",'../files/greeks/greeks.csv')    
-    # print(f"Done")            
-
+    save_greeks_to_csv("../files/greeks/greeks.json",'../files/greeks/greeks.csv')    
+    print(f"Done")  
 
 # Example usage
 # greeks_data = read_greeks_from_db()
