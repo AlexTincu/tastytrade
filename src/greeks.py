@@ -4,7 +4,7 @@ import json
 import asyncio
 
 from tastytrade import Session
-# from tastytrade import Account
+from tastytrade import Account
 from tastytrade import DXLinkStreamer
 from tastytrade.dxfeed import Greeks
 from tastytrade.instruments import get_option_chain
@@ -13,7 +13,7 @@ from decimal import Decimal  # Add this import
 
 load_dotenv()  # Load environment variables from .env file
 
-filename="files/greeks_data.json"
+# filename="../files/greeks_data.json"
 symbols = ['AAPL', 'GOOGL', 'MSFT']  # Define a list of symbols
 
 # Set delta range (for example, between 0.2 and 0.8)
@@ -88,7 +88,7 @@ async def save_greeks_to_file(data, filename):
 async def main():
     for symbol in symbols:  # Iterate over each symbol
         # Update the filename for each symbol
-        filename = f"files/{symbol}_greeks_data.json"
+        filename = f"../files/greeks/{symbol}.json"
 
         # Clean the file before appending new data
         clean_file(filename)
