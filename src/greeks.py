@@ -2,14 +2,15 @@ import os  # Import the os module
 from dotenv import load_dotenv
 import json
 import asyncio
+import sqlite3
 
 from tastytrade import Session
-from tastytrade import Account
 from tastytrade import DXLinkStreamer
 from tastytrade.dxfeed import Greeks
 from tastytrade.instruments import get_option_chain
 from tastytrade.utils import get_tasty_monthly
-from decimal import Decimal  # Add this import
+from decimal import Decimal
+from datetime import datetime, date
 
 load_dotenv()  # Load environment variables from .env file
 
@@ -23,6 +24,7 @@ max_delta = float(os.getenv('MAX_DELTA', 0.22))
 # Use environment variables for sensitive information
 username = os.getenv('TASTYTRADE_USERNAME')
 password = os.getenv('TASTYTRADE_PASSWORD')
+sqlitedb = '../sqlite/db.db'
 
 session = Session(username, password)
 
@@ -55,6 +57,30 @@ def serialize_greeks(greeks_data):
         for key, value in vars(greeks_data).items()  # Convert Greeks object to a dictionary
     }
 
+  
+def serialize_object(data):
+    """Convert data into a JSON-serializable format."""
+    def convert_value(value):
+        if isinstance(value, Decimal):
+            return float(value)  # Convert Decimal to float
+        elif isinstance(value, (datetime, date)):
+            return value.isoformat()  # Convert datetime and date to ISO format string
+        elif isinstance(value, list):
+            return [convert_value(item) for item in value]  # Recursively convert list items
+        elif isinstance(value, dict):
+            return {key: convert_value(val) for key, val in value.items()}  # Recursively convert dict items
+        else:
+            return value  # Return other types as-is
+
+    if hasattr(data, '__dict__'):
+        return {key: convert_value(value) for key, value in vars(data).items()}
+    elif isinstance(data, dict):
+        return {key: convert_value(value) for key, value in data.items()}
+    elif isinstance(data, list):
+        return [convert_value(item) for item in data]
+    else:
+        return convert_value(data)
+    
 # Function to filter Greeks data based on delta value
 def filter_by_delta(data, min_delta, max_delta):
     """Filter the Greeks data based on delta within a given range."""
@@ -64,9 +90,7 @@ def filter_by_delta(data, min_delta, max_delta):
 
 async def save_greeks_to_file(data, filename):
     """Append the greeks data to a JSON file."""
-    serialized_data = serialize_greeks(data)
-    # print(serialized_data)
-    
+
     try:
         # Load existing data if the file already exists
         try:
@@ -76,7 +100,7 @@ async def save_greeks_to_file(data, filename):
             existing_data = []
 
         # Append the new data        
-        existing_data.append(serialized_data)
+        existing_data.append(data)
 
         # Write updated data back to the file
         with open(filename, "w") as file:
@@ -84,6 +108,49 @@ async def save_greeks_to_file(data, filename):
 
     except Exception as e:
         print(f"Error saving data to file: {e}")
+
+# does not work yet
+def save_greeks_to_db(data):
+    # Connect to the SQLite database (or create it if it doesn't exist)
+    conn = sqlite3.connect(sqlitedb)
+    cursor = conn.cursor()
+
+    # Create a table if it doesn't exist
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS greeks (
+            event_symbol TEXT,
+            event_time INTEGER,
+            event_flags INTEGER,
+            "index" INTEGER,
+            time INTEGER,
+            sequence INTEGER,
+            price REAL,
+            volatility REAL,
+            delta REAL,
+            gamma REAL,
+            theta REAL,
+            rho REAL,
+            vega REAL
+        )
+    ''')
+
+    # Insert data into the table
+    cursor.execute('''
+        INSERT INTO greeks (
+            event_symbol, event_time, event_flags, "index", time, sequence,
+            price, volatility, delta, gamma, theta, rho, vega
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ''', (
+        data['event_symbol'], data['event_time'], data['event_flags'], data['index'],
+        data['time'], data['sequence'], data['price'], data['volatility'], data['delta'],
+        data['gamma'], data['theta'], data['rho'], data['vega']
+    ))
+
+    # Commit the transaction and close the connection
+    conn.commit()
+    cursor.close()
+    conn.close()
 
 async def main():
     for symbol in symbols:  # Iterate over each symbol
@@ -113,7 +180,9 @@ async def main():
                 
                 # Check if delta is within the specified range
                 if filter_by_delta(greeks, min_delta, max_delta):     
-                    await save_greeks_to_file(greeks, filename)  # Save the data to a JSON file
+                    greeks = serialize_object(greeks)
+                    await save_greeks_to_file(greeks, filename)  # Save the data to a JSON file                    
+                    save_greeks_to_db(greeks)
                     # print(greeks)  # Print the update
                     
             print(f"Done for {symbol}")
@@ -121,3 +190,26 @@ async def main():
 # Run the async function using the event loop
 if __name__ == "__main__":
     asyncio.run(main())    
+
+def read_greeks_from_db():
+    # Connect to the SQLite database
+    conn = sqlite3.connect(sqlitedb)
+    cursor = conn.cursor()
+
+    # Execute a query to select all data from the greeks table
+    cursor.execute('SELECT * FROM greeks')
+
+    # Fetch all rows from the executed query
+    rows = cursor.fetchall()
+
+    # Close the cursor and connection
+    cursor.close()
+    conn.close()
+
+    # Return the fetched rows
+    return rows
+
+# Example usage
+# greeks_data = read_greeks_from_db()
+# for row in greeks_data:
+#     print(row)    
