@@ -15,15 +15,7 @@ from datetime import datetime, date
 
 load_dotenv()  # Load environment variables from .env file
 
-
-def get_watchlist_symbols():
-    with open('../files/watchlist.json', 'r') as file:
-        watchlist = json.load(file)
-    return [item['symbol'] for item in watchlist if 'symbol' in item]    
-
 filename="../files/greeks/greeks.json"
-# symbols = ['AAPL', 'GOOGL', 'MSFT']  # Define a list of symbols
-symbols = get_watchlist_symbols()
 
 # Set delta range (for example, between 0.2 and 0.8)
 min_delta = float(os.getenv('MIN_DELTA', 0.16))
@@ -36,9 +28,10 @@ sqlitedb = '../sqlite/db.db'
 
 session = Session(username, password)
 
-# account = Account.get_accounts(session)[0]
-# positions = account.get_positions(session)
-# print(positions[0])
+def get_watchlist_symbols():
+    with open('../files/watchlist.json', 'r') as file:
+        watchlist = json.load(file)
+    return [item['symbol'] for item in watchlist if 'symbol' in item]    
 
 def clean_file(filename):
     """Clean the file by resetting its contents."""
@@ -205,7 +198,7 @@ def save_greeks_to_csv(json_filename, csv_filename):
         with open(csv_filename, 'w', newline='') as csv_file:
             writer = csv.writer(csv_file)
             # Write the header
-            writer.writerow(['root_symbol', 'date', 'option_type', 'strike_price', 'event_symbol', 'delta'])
+            writer.writerow(['root_symbol', 'date', 'strike_price', 'event_symbol', 'delta'])
 
             for item in greeks_data:
                 # Parse the event_symbol
@@ -221,15 +214,17 @@ def save_greeks_to_csv(json_filename, csv_filename):
                 delta = round(item['delta'], 2)
 
                 # Map option_type to "PUT" or "CALL"
-                option_type_mapped = "PUT" if option_type == "P" else "CALL"
+                # option_type_mapped = "PUT" if option_type == "P" else "CALL"
 
                 # Write the row to the CSV
-                writer.writerow([root_symbol, human_readable_date, option_type_mapped, strike_price, item['event_symbol'], delta])
+                writer.writerow([root_symbol, human_readable_date, strike_price, item['event_symbol'], delta])
 
         print(f"Data has been successfully written to {csv_filename}.")
     except Exception as e:
         print(f"Error saving data to CSV: {e}")
 
+# symbols = ['AAPL', 'GOOGL', 'MSFT']  # Define a list of symbols
+symbols = get_watchlist_symbols()
 
 async def main():
     # Clean the file before appending new data
@@ -267,11 +262,11 @@ async def main():
                     
             print(f"Done for {symbol}")
 
-    # print("Starts ")
-    # clean_file('../files/greeks/greeks.csv')
+    print("Starts exporting options to csv")
+    clean_file('../files/greeks/greeks.csv')
 
-    # save_greeks_to_csv("../files/greeks/greeks.json",'../files/greeks/greeks.csv')    
-    # print(f"Done")            
+    save_greeks_to_csv("../files/greeks/greeks.json",'../files/greeks/greeks.csv')    
+    print(f"Done")            
 
 
 # Example usage

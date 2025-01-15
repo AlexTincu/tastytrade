@@ -16,14 +16,7 @@ from datetime import datetime, date
 load_dotenv()  # Load environment variables from .env file
 
 
-def get_watchlist_symbols():
-    with open('../files/watchlist.json', 'r') as file:
-        watchlist = json.load(file)
-    return [item['symbol'] for item in watchlist if 'symbol' in item]    
-
 filename="../files/greeks/greeks.json"
-# symbols = ['AAPL', 'GOOGL', 'MSFT']  # Define a list of symbols
-symbols = get_watchlist_symbols()
 
 # Set delta range (for example, between 0.2 and 0.8)
 min_delta = float(os.getenv('MIN_DELTA', 0.16))
@@ -39,6 +32,12 @@ session = Session(username, password)
 # account = Account.get_accounts(session)[0]
 # positions = account.get_positions(session)
 # print(positions[0])
+
+
+def get_watchlist_symbols():
+    with open('../files/watchlist.json', 'r') as file:
+        watchlist = json.load(file)
+    return [item['symbol'] for item in watchlist if 'symbol' in item]    
 
 def clean_file(filename):
     """Clean the file by resetting its contents."""
@@ -227,6 +226,8 @@ def save_greeks_to_csv(json_filename, csv_filename):
     except Exception as e:
         print(f"Error saving data to CSV: {e}")
 
+# symbols = ['AAPL', 'GOOGL', 'MSFT']  # Define a list of symbols
+symbols = get_watchlist_symbols()
 
 async def main():
     # # Clean the file before appending new data
