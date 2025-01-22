@@ -1,10 +1,10 @@
 import os  # Import the os module
 from dotenv import load_dotenv
+import pymysql
 
 load_dotenv()  # Load environment variables from .env file
 
 MYSQL_URL = os.getenv('MYSQL_URL')
-import pymysql
 
 # Database connection setup
 def get_connection():
@@ -17,7 +17,7 @@ def get_connection():
     )
 
 # Insert a row
-def insert_row(data):
+def insert_greeks_row(data, conn):
     # event_time, event_flags, 
     # data["event_time"], data["event_flags"], 
     query = """
@@ -29,35 +29,13 @@ def insert_row(data):
         data["time"], data["sequence"], data["price"], data["volatility"], 
         data["delta"], data["gamma"], data["theta"], data["rho"], data["vega"]
     )
-    with get_connection() as conn:
-        with conn.cursor() as cursor:
-            cursor.execute(query, values)
-            conn.commit()
-
-# def insert_row(data):
-#     query = """
-#     INSERT INTO greeks (
-#         event_symbol, event_time, event_flags, `index`, `time`, sequence, 
-#         price, volatility, delta, gamma, theta, rho, vega
-#     )
-#     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-#     """
-#     values = (
-#         data["event_symbol"], data["event_time"], data["event_flags"], data["index"], 
-#         data["time"], data["sequence"], data["price"], data["volatility"], 
-#         data["delta"], data["gamma"], data["theta"], data["rho"], data["vega"]
-#     )
-    
-#     try:
-#         connection = get_connection()
-#         with connection.cursor() as cursor:
-#             cursor.execute(query, values)
-#         connection.commit()
-#     finally:
-#         connection.close()            
+    # with get_connection() as conn:
+    with conn.cursor() as cursor:
+        cursor.execute(query, values)
+        conn.commit()
 
 # Insert or Update (Upsert) a row
-def upsert_row(data):
+def upsert_greeks_row(data):
     query = """
     INSERT INTO greeks (event_symbol, event_time, event_flags, `index`, `time`, sequence, price, volatility, delta, gamma, theta, rho, vega)
     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
@@ -112,10 +90,34 @@ def truncate_table(table_name='greeks'):
         connection.close()
 
 # Function to save or update greeks data in MySQL
-async def save_greeks_to_mysql(greeks_data):
-    del greeks_data["event_time"]
-    del greeks_data["event_flags"]
-    insert_row(greeks_data)
+async def save_greeks_to_mysql(data, conn):    
+    # ignore these
+    # del greeks["event_time"]
+    # del greeks["event_flags"]
+    query = """
+    INSERT INTO greeks (event_symbol, `index`, `time`, sequence, price, volatility, delta, gamma, theta, rho, vega)
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+    """
+    values = (
+        data["event_symbol"], data["index"], 
+        data["time"], data["sequence"], data["price"], data["volatility"], 
+        data["delta"], data["gamma"], data["theta"], data["rho"], data["vega"]
+    )
+    # with get_connection() as conn:
+    with conn.cursor() as cursor:
+        cursor.execute(query, values)
+        conn.commit()
+
+async def save_watchlist_to_mysql(data, conn):    
+    
+    query = """INSERT INTO watchlist (symbol, instrument_type) VALUES (%s, %s)"""
+    values = (
+        data["symbol"], data["instrument-type"]
+    )
+    # with get_connection() as conn:
+    with conn.cursor() as cursor:
+        cursor.execute(query, values)
+        conn.commit()
 
 def get_event_symbols(conn):
     """
@@ -141,7 +143,26 @@ def get_event_symbols(conn):
     # finally:
     #     conn.close()
 
-def update_quote(connection, quote):
+def insert_or_update_quote(conn, quote):
+    query = """
+    INSERT INTO option_chains (streamer_symbol, bid_price, ask_price, bid_size, ask_size)
+    VALUES (%s, %s, %s, %s, %s)
+    ON DUPLICATE KEY UPDATE
+        bid_price = VALUES(bid_price),
+        ask_price = VALUES(ask_price),
+        bid_size = VALUES(bid_size),
+        ask_size = VALUES(ask_size);
+    """
+    
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(query, (quote.bid_price, quote.ask_price, quote.bid_size, quote.ask_size, quote.event_symbol))
+        conn.commit()
+        # print(f"Updated greeks for event_symbol '{event_symbol}'.")
+    except Exception as e:
+        print(f"Error updating greeks for streamer_symbol '{quote.event_symbol}': {e}")
+
+def update_quote(conn, quote):
     query = """
     UPDATE option_chains
     SET bid_price = %s, ask_price = %s, bid_size = %s, ask_size = %s
@@ -149,13 +170,21 @@ def update_quote(connection, quote):
     """
     
     try:
-        with connection.cursor() as cursor:
+        with conn.cursor() as cursor:
             cursor.execute(query, (quote.bid_price, quote.ask_price, quote.bid_size, quote.ask_size, quote.event_symbol))
-        connection.commit()
+        conn.commit()
         # print(f"Updated greeks for event_symbol '{event_symbol}'.")
     except Exception as e:
         print(f"Error updating greeks for streamer_symbol '{quote.event_symbol}': {e}")
 
+def get_watchlist_symbols():
+    query = "SELECT * FROM watchlists"
+    with get_connection() as conn:
+        with conn.cursor() as cursor:
+            cursor.execute(query)
+            rows = cursor.fetchall()
+
+    return [item['symbol'] for item in rows if 'symbol' in item] 
 
 # Example usage
 # row_data = {

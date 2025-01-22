@@ -9,6 +9,8 @@ from tastytrade import Account
 from tastytrade import Watchlist
 
 from decimal import Decimal
+from mysql_operations import save_watchlist_to_mysql, truncate_table, get_connection
+
 
 load_dotenv()  # Load environment variables from .env file
 
@@ -87,25 +89,36 @@ async def save_watchlist_to_file(watchlist, filename):
 
 
 async def main():
+    path = './python_tastytrade/files/'
     """Retrieve and save account and position data to separate JSON files."""
     accounts = Account.get_accounts(session)
 
     # Save accounts to file
-    filename = "../files/accounts.json"    
+    filename = f"{path}/accounts.json"
     clean_file(filename)
 
     await save_accounts_to_file(accounts, filename)
 
-    # Save watchlist to file
-    
+    # Save watchlist to file    
     watchlist = Watchlist.get_private_watchlist(session, watchlist_name)
 
-    filename = "../files/watchlist.json"
-    clean_file(filename)
-    await save_watchlist_to_file(watchlist.watchlist_entries, filename)
+    # filename = f"{path}/watchlist.json"
+    # clean_file(filename)
+    # await save_watchlist_to_file(watchlist.watchlist_entries, filename)
+    
+    try:
+        connection = get_connection()
+
+        await truncate_table(watchlist)
+        watchlist_entries = serialize_object(watchlist.watchlist_entries)
+        await save_watchlist_to_mysql(watchlist_entries)
+
+    finally:        
+        connection.close() # Close the shared connection after all calls    
+    
 
     # Save positions to file
-    filename = "../files/positions.json"    
+    filename = f"{path}/positions.json"
     clean_file(filename)
 
     for account in accounts:

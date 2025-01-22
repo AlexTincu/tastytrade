@@ -12,16 +12,19 @@ from tastytrade import DXLinkStreamer
 from tastytrade.dxfeed import Greeks
 from tastytrade.dxfeed import Quote
 from tastytrade.instruments import get_option_chain
-from tastytrade.utils import get_tasty_monthly
+from tastytrade.utils import get_tasty_monthly, _get_last_day_of_month
 
 # from tortoise import Tortoise, run_async
 # from tortoise import run_async
 # from sqlite_operations import save_greeks_to_sqlite, read_greeks_from_db
-from mysql_operations import save_greeks_to_mysql, truncate_table, get_event_symbols, get_connection, update_quote
+from mysql_operations import save_greeks_to_mysql, truncate_table, get_event_symbols, get_connection, update_quote, get_watchlist_symbols
 
 load_dotenv()  # Load environment variables from .env file
 
-filename="../files/greeks/greeks.json"
+path = './python_tastytrade/files/'
+# filename="../files/greeks/greeks.json"
+greeksJsonFile = f"{path}/greeks.json"
+watchlistJsonFile = f"{path}/watchlist.json"
 
 # Set delta range (for example, between 0.2 and 0.8)
 min_delta = float(os.getenv('MIN_DELTA', 0.16))
@@ -35,8 +38,8 @@ sqlitedb = '../sqlite/db.db'
 
 session = Session(username, password)
 
-def get_watchlist_symbols():
-    with open('../files/watchlist.json', 'r') as file:
+def get_watchlist_symbols_from_file():
+    with open(watchlistJsonFile, 'r') as file:
         watchlist = json.load(file)
     return [item['symbol'] for item in watchlist if 'symbol' in item]    
 
@@ -235,7 +238,7 @@ async def fetch_quotes():
     connection = get_connection()
 
     subs_list = get_event_symbols(connection)
-    
+        
     try:
         async with DXLinkStreamer(session) as streamer:
             await streamer.subscribe(Quote, subs_list)
@@ -255,52 +258,62 @@ async def fetch_quotes():
     finally:        
         connection.close() # Close the shared connection after all calls
 
+
 async def fetch_greeks():
-    symbols = get_watchlist_symbols()
+    
+    symbols = get_watchlist_symbols()    
+
     # Clean the file before appending new data
     # clean_file(filename)
-    truncate_table()
-
-    for symbol in symbols:  # Iterate over each symbol
-        # Update the filename for each symbol
-        # filename = f"../files/greeks/{symbol}.json"
-        # clean_file(filename)
-        
-        chain = get_option_chain(session, symbol)
-        exp = get_tasty_monthly()  # 45 DTE expiration!
-
-        # Collect streamer symbols for all items in chain[exp]
-        subs_list = [
-            item.streamer_symbol
-            for item in chain[exp]
-        ]
-        
-        async with DXLinkStreamer(session) as streamer:
-            # Subscribe to Greeks for all items in subs_list
-            await streamer.subscribe(Greeks, subs_list)
+    truncate_table('greeks')
+    
+    try:
+        connection = get_connection()
+        for symbol in symbols:  # Iterate over each symbol
+            # Update the filename for each symbol
+            # filename = f"../files/greeks/{symbol}.json"
+            # clean_file(filename)
             
-            # Continuously process incoming events
-            print("Starts for:", symbol)
-            for _ in subs_list:  # Use a for loop to iterate over subs_list
-                greeks = await streamer.get_event(Greeks)  # Get the next event                        
+            chain = get_option_chain(session, symbol)
+            exp = get_tasty_monthly()  # 45 DTE expiration!
+            # exp = _get_last_day_of_month(date(2025, 2, 18))
+            # print(exp)
+            # return
+
+            # Collect streamer symbols for all items in chain[exp]
+            subs_list = [
+                item.streamer_symbol
+                for item in chain[exp]
+            ]
+            # subs_list = ['.TSLA250221C550', '.TSLA250221P355']
+            
+            async with DXLinkStreamer(session) as streamer:
+                # Subscribe to Greeks for all items in subs_list
+                await streamer.subscribe(Greeks, subs_list)
                 
-                # Check if delta is within the specified range
-                if filter_by_delta(greeks, min_delta, max_delta):     
-                    greeks = serialize_object(greeks)
-                    greeks = round_greeks_data(greeks)
-                    greeks = transform_call_to_put(greeks)
-                    # print(greeks)
-                    # await save_greeks_to_file(greeks, filename)  # Save the data to a JSON file                    
-                    # save_greeks_to_sqlite(greeks)
-                    await save_greeks_to_mysql(greeks)
-                    # print(greeks)  # Print the update
+                # Continuously process incoming events
+                print("Starts for:", symbol)
+                for _ in subs_list:  # Use a for loop to iterate over subs_list
+                    greeks = await streamer.get_event(Greeks)  # Get the next event                        
                     
-            print(f"Done for {symbol}")
+                    # Check if delta is within the specified range
+                    if filter_by_delta(greeks, min_delta, max_delta):     
+                        greeks = serialize_object(greeks)
+                        greeks = round_greeks_data(greeks)
+                        greeks = transform_call_to_put(greeks)
+
+                        # await save_greeks_to_file(greeks, filename)  # Save the data to a JSON file                    
+                        # save_greeks_to_sqlite(greeks)
+                        await save_greeks_to_mysql(greeks, connection)
+                        # print(greeks)  # Print the update
+                        
+                print(f"Done for {symbol}")
+    finally:        
+        connection.close() # Close the shared connection after all calls
 
 async def main():
-    # await mysql_init()  # Initialize the ORM
     await fetch_greeks()
-    await fetch_quotes()
+    await fetch_quotes()    
     # convert_greeks_from_json_to_csv("../files/greeks/greeks.json",'../files/greeks/greeks.csv')    
 
 # Run the async function using the event loop
