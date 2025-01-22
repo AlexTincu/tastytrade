@@ -5,7 +5,7 @@ import asyncio
 import sqlite3
 import csv
 from decimal import Decimal
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 
 from tastytrade import Session
 from tastytrade import DXLinkStreamer
@@ -258,6 +258,34 @@ async def fetch_quotes():
     finally:        
         connection.close() # Close the shared connection after all calls
 
+from datetime import datetime, timedelta
+
+def date_is_within(date_input, min_days=21, max_days=70, date_format="%Y-%m-%d"):    
+    # Ensure min_days and max_days are integers
+    if not isinstance(min_days, int) or not isinstance(max_days, int):
+        raise TypeError("min_days and max_days must be integers")
+    
+    now = datetime.now()
+    min_date = now + timedelta(days=min_days)
+    max_date = now + timedelta(days=max_days)
+
+    # Convert input to a datetime object if it's not already
+    if isinstance(date_input, str):
+        date_obj = datetime.strptime(date_input, date_format)
+    elif isinstance(date_input, date):  # Handle datetime.date input
+        date_obj = datetime.combine(date_input, datetime.min.time())
+    elif isinstance(date_input, datetime):  # Already a datetime
+        date_obj = date_input
+    else:
+        raise TypeError("date_input must be a string, datetime.date, or datetime.datetime object")
+
+    # print(f"{min_date} <= {date_obj} < {max_date}")
+    # Check if the date is within the range
+    return min_date <= date_obj < max_date
+
+# Example usage:
+# dates = ["2025-01-22", "2025-03-20", "2025-04-01", "2025-01-15"]
+# filtered = filter_dates_within(dates)
 
 async def fetch_greeks():
     
@@ -266,7 +294,22 @@ async def fetch_greeks():
     # Clean the file before appending new data
     # clean_file(filename)
     truncate_table('greeks')
+
+    chain = get_option_chain(session, 'TSLA')
+    # exp = get_tasty_monthly()  # 45 DTE expiration!
+    # exp = _get_last_day_of_month(date(2025, 2, 18))
+    # Collect streamer symbols for all items in chain[exp]
+    # subs_list = [
+    #     item.streamer_symbol
+    #     for item in chain[exp]
+    # ]
     
+    # for exp in chain:
+    #     if date_is_within(exp, 20, 70):
+    #         # subs_list = chain[exp]
+    #         print(exp)            
+    # return     
+
     try:
         connection = get_connection()
         for symbol in symbols:  # Iterate over each symbol
@@ -275,44 +318,49 @@ async def fetch_greeks():
             # clean_file(filename)
             
             chain = get_option_chain(session, symbol)
-            exp = get_tasty_monthly()  # 45 DTE expiration!
+            # exp = get_tasty_monthly()  # 45 DTE expiration!
             # exp = _get_last_day_of_month(date(2025, 2, 18))
-            # print(exp)
-            # return
-
             # Collect streamer symbols for all items in chain[exp]
-            subs_list = [
-                item.streamer_symbol
-                for item in chain[exp]
-            ]
+            # subs_list = [
+            #     item.streamer_symbol
+            #     for item in chain[exp]
+            # ]
             # subs_list = ['.TSLA250221C550', '.TSLA250221P355']
             
-            async with DXLinkStreamer(session) as streamer:
-                # Subscribe to Greeks for all items in subs_list
-                await streamer.subscribe(Greeks, subs_list)
-                
-                # Continuously process incoming events
-                print("Starts for:", symbol)
-                for _ in subs_list:  # Use a for loop to iterate over subs_list
-                    greeks = await streamer.get_event(Greeks)  # Get the next event                        
-                    
-                    # Check if delta is within the specified range
-                    if filter_by_delta(greeks, min_delta, max_delta):     
-                        greeks = serialize_object(greeks)
-                        greeks = round_greeks_data(greeks)
-                        greeks = transform_call_to_put(greeks)
-
-                        # await save_greeks_to_file(greeks, filename)  # Save the data to a JSON file                    
-                        # save_greeks_to_sqlite(greeks)
-                        await save_greeks_to_mysql(greeks, connection)
-                        # print(greeks)  # Print the update
+            for exp in chain:
+                if date_is_within(exp, 20, 70):
+                    subs_list = [
+                        item.streamer_symbol
+                        for item in chain[exp]
+                    ]      
+                    # print(subs_list)
+                    # return
+                    async with DXLinkStreamer(session) as streamer:
+                        # Subscribe to Greeks for all items in subs_list
+                        await streamer.subscribe(Greeks, subs_list)
                         
-                print(f"Done for {symbol}")
+                        # Continuously process incoming events
+                        print("Starts for:", symbol)
+                        for _ in subs_list:  # Use a for loop to iterate over subs_list
+                            greeks = await streamer.get_event(Greeks)  # Get the next event                        
+                            
+                            # Check if delta is within the specified range
+                            if filter_by_delta(greeks, min_delta, max_delta):     
+                                greeks = serialize_object(greeks)
+                                greeks = round_greeks_data(greeks)
+                                greeks = transform_call_to_put(greeks)
+
+                                # await save_greeks_to_file(greeks, filename)  # Save the data to a JSON file                    
+                                # save_greeks_to_sqlite(greeks)
+                                await save_greeks_to_mysql(greeks, connection)
+                                # print(greeks)  # Print the update
+                                
+                        print(f"Done for {symbol}")
     finally:        
         connection.close() # Close the shared connection after all calls
 
 async def main():
-    await fetch_greeks()
+    # await fetch_greeks()
     await fetch_quotes()    
     # convert_greeks_from_json_to_csv("../files/greeks/greeks.json",'../files/greeks/greeks.csv')    
 

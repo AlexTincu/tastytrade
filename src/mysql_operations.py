@@ -35,7 +35,7 @@ def insert_greeks_row(data, conn):
         conn.commit()
 
 # Insert or Update (Upsert) a row
-def upsert_greeks_row(data):
+def upsert_greeks_row(data, conn):
     query = """
     INSERT INTO greeks (event_symbol, event_time, event_flags, `index`, `time`, sequence, price, volatility, delta, gamma, theta, rho, vega)
     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
@@ -58,10 +58,10 @@ def upsert_greeks_row(data):
         data["time"], data["sequence"], data["price"], data["volatility"], 
         data["delta"], data["gamma"], data["theta"], data["rho"], data["vega"]
     )
-    with get_connection() as conn:
-        with conn.cursor() as cursor:
-            cursor.execute(query, values)
-            conn.commit()
+
+    with conn.cursor() as cursor:
+        cursor.execute(query, values)
+        conn.commit()
 
 # Read rows based on a filter
 def read_rows(delta_filter):
@@ -91,6 +91,8 @@ def truncate_table(table_name='greeks'):
 
 # Function to save or update greeks data in MySQL
 async def save_greeks_to_mysql(data, conn):    
+    await upsert_greeks_row(data, conn)
+    return
     # ignore these
     # del greeks["event_time"]
     # del greeks["event_flags"]
